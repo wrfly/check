@@ -104,5 +104,5 @@ func main() {
 	testCheckError()
 
 	println("==end==")
-	time.Sleep(time.Minute)
+	time.Sleep(time.Second * 2)
 }
