@@ -2,7 +2,10 @@ package check
 
 import (
 	"context"
+	"sync"
 )
+
+var wg sync.WaitGroup
 
 // CheckFunc is the check function only return true or false
 type CheckFunc func() bool
@@ -12,23 +15,24 @@ type CheckErrFunc func() error
 
 type e struct{}
 
-func wrapCheck(do chan e, ctx context.Context,
-	cf CheckFunc, noErrChan chan e) chan e {
+func wrapCheck(do chan e, ctx context.Context, cf CheckFunc, noErrChan chan e) chan e {
 	ch := make(chan e)
 	go func() {
+		c := make(chan bool, 1)
 		<-do
-		defer close(ch)
 
-		// not passed
-		if !cf() {
-			return
-		}
 		select {
 		case <-ctx.Done():
-		default:
-			noErrChan <- e{}
+			close(ch) // not pass
+		case c <- cf():
+			close(c)
+			if <-c {
+				noErrChan <- e{}
+			} else {
+				// not pass
+				close(ch)
+			}
 		}
-		<-ctx.Done()
 	}()
 	return ch
 }
@@ -36,15 +40,13 @@ func wrapCheck(do chan e, ctx context.Context,
 func wrapCheckWithError(do chan e, ctx context.Context, cf CheckErrFunc) chan error {
 	ch := make(chan error)
 	go func() {
-		<-do
 		defer close(ch)
+		<-do
 
 		select {
 		case <-ctx.Done():
-			return
 		case ch <- cf():
 		}
-		<-ctx.Done()
 	}()
 	return ch
 }
@@ -70,24 +72,28 @@ func Passed(ctx context.Context, checkPoints []CheckFunc) bool {
 		defer close(passChan)
 		defer close(eventChan)
 		defer close(noErrChan)
+
 		for {
 			select {
 			case <-noErrChan:
 				checkNum--
-				if checkNum == 0 {
-					close(noErrChan)
-					if cctx.Err() == nil {
-						passChan <- true
-					}
-				}
-				continue
-
 			case <-eventChan:
+				checkNum--
+				if cctx.Err() == nil {
+					passChan <- false
+				}
+
 			case <-ctx.Done():
-				// context cancled
+				if cctx.Err() == nil {
+					passChan <- false
+				}
 			}
-			if cctx.Err() == nil {
-				passChan <- false
+
+			if checkNum == 0 {
+				if cctx.Err() == nil {
+					passChan <- true
+				}
+				return
 			}
 		}
 	}()
@@ -120,14 +126,17 @@ func NoError(ctx context.Context, checkPoints []CheckErrFunc) error {
 				if checkNum == 0 {
 					close(errorChan)
 					errGot <- nil
+					return
 				}
 				if err != nil && cctx.Err() == nil {
 					errGot <- err
+					return
 				}
 			case <-ctx.Done():
 				if cctx.Err() == nil {
 					errGot <- ctx.Err()
 				}
+				return
 			}
 		}
 	}()
