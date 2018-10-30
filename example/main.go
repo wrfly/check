@@ -15,13 +15,17 @@ import (
 var noError = flag.Bool("ne", false, "no error")
 
 func generateErr(d time.Duration) error {
-	printf("sleep %s", d)
-	time.Sleep(d)
-	if time.Now().Nanosecond()%4 == 0 && *noError == false {
+	returnError := time.Now().Nanosecond()%4 != 0 && *noError == false
+	if returnError {
 		printf("error sleep %s", d)
+	} else {
+		printf("sleep %s", d)
+	}
+	time.Sleep(d)
+	printf("done sleep %s", d)
+	if returnError {
 		return fmt.Errorf("error: sleep %s", d)
 	}
-	printf("done sleep %s", d)
 	return nil
 }
 
@@ -98,11 +102,12 @@ func main() {
 
 	println("==testCheck==")
 	testCheck()
-	time.Sleep(time.Second)
+	time.Sleep(time.Second * 1)
 
 	println("==testCheckError==")
 	testCheckError()
 
 	println("==end==")
-	time.Sleep(time.Second * 2)
+
+	time.Sleep(time.Second * 1)
 }
