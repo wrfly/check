@@ -48,7 +48,7 @@ func testCheck() {
 	}
 	checkErrE := func() bool { return generateErr(time.Second/4) == nil }
 
-	checkPoints := []check.CheckFunc{
+	checkPoints := []check.Func{
 		checkErrA,
 		checkErrB,
 		checkErrC,
@@ -78,7 +78,7 @@ func testCheckError() {
 	}
 	checkErrE := func() error { return generateErr(time.Second / 4) }
 
-	checkPoints := []check.CheckErrFunc{
+	checkPoints := []check.FuncWithErr{
 		checkErrA,
 		checkErrB,
 		checkErrC,

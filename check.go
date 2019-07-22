@@ -4,15 +4,15 @@ import (
 	"context"
 )
 
-// CheckFunc is the check function only return true or false
-type CheckFunc func() bool
+// Func is the check function only return true or false
+type Func func() bool
 
-// CheckErrFunc returns error if found
-type CheckErrFunc func() error
+// FuncWithErr returns error if found
+type FuncWithErr func() error
 
 type e struct{}
 
-func wrapCheck(ctx context.Context, do chan e, cf CheckFunc, noErrChan chan e) chan e {
+func wrapCheck(ctx context.Context, do chan e, cf Func, noErrChan chan e) chan e {
 	ch := make(chan e)
 	go func() {
 		c := make(chan bool, 1)
@@ -34,7 +34,7 @@ func wrapCheck(ctx context.Context, do chan e, cf CheckFunc, noErrChan chan e) c
 	return ch
 }
 
-func wrapCheckWithError(ctx context.Context, do chan e, cf CheckErrFunc) chan error {
+func wrapCheckWithError(ctx context.Context, do chan e, cf FuncWithErr) chan error {
 	ch := make(chan error)
 	go func() {
 		defer close(ch)
@@ -49,7 +49,7 @@ func wrapCheckWithError(ctx context.Context, do chan e, cf CheckErrFunc) chan er
 }
 
 // Passed returns true if all check points passed, otherwise, returns false
-func Passed(ctx context.Context, checkPoints []CheckFunc) bool {
+func Passed(ctx context.Context, checkPoints []Func) bool {
 	if len(checkPoints) == 0 {
 		return true
 	}
@@ -103,7 +103,7 @@ func Passed(ctx context.Context, checkPoints []CheckFunc) bool {
 }
 
 // NoError returns the first error it got, if all passed, returns nil
-func NoError(ctx context.Context, checkPoints []CheckErrFunc) error {
+func NoError(ctx context.Context, checkPoints []FuncWithErr) error {
 	if len(checkPoints) == 0 {
 		return nil
 	}

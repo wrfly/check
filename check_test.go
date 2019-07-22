@@ -24,10 +24,10 @@ func TestCheck(t *testing.T) {
 		return gError(pass) == nil
 	}
 
-	gCheckpoints := func(pass bool) []CheckFunc {
-		checkPoints := []CheckFunc{}
+	gCheckpoints := func(pass bool) []Func {
+		checkPoints := []Func{}
 		for i := 0; i < 10; i++ {
-			var fn CheckFunc = func() bool {
+			var fn Func = func() bool {
 				return gBool(pass)
 			}
 			checkPoints = append(checkPoints, fn)
@@ -35,10 +35,10 @@ func TestCheck(t *testing.T) {
 		return checkPoints
 	}
 
-	gErrCheckpoints := func(pass bool) []CheckErrFunc {
-		checkPoints := []CheckErrFunc{}
+	gErrCheckpoints := func(pass bool) []FuncWithErr {
+		checkPoints := []FuncWithErr{}
 		for i := 0; i < 10; i++ {
-			var fn CheckErrFunc = func() error {
+			var fn FuncWithErr = func() error {
 				return gError(pass)
 			}
 			checkPoints = append(checkPoints, fn)
