@@ -2,10 +2,7 @@ package check
 
 import (
 	"context"
-	"sync"
 )
-
-var wg sync.WaitGroup
 
 // CheckFunc is the check function only return true or false
 type CheckFunc func() bool
@@ -15,7 +12,7 @@ type CheckErrFunc func() error
 
 type e struct{}
 
-func wrapCheck(do chan e, ctx context.Context, cf CheckFunc, noErrChan chan e) chan e {
+func wrapCheck(ctx context.Context, do chan e, cf CheckFunc, noErrChan chan e) chan e {
 	ch := make(chan e)
 	go func() {
 		c := make(chan bool, 1)
@@ -37,7 +34,7 @@ func wrapCheck(do chan e, ctx context.Context, cf CheckFunc, noErrChan chan e) c
 	return ch
 }
 
-func wrapCheckWithError(do chan e, ctx context.Context, cf CheckErrFunc) chan error {
+func wrapCheckWithError(ctx context.Context, do chan e, cf CheckErrFunc) chan error {
 	ch := make(chan error)
 	go func() {
 		defer close(ch)
@@ -53,16 +50,20 @@ func wrapCheckWithError(do chan e, ctx context.Context, cf CheckErrFunc) chan er
 
 // Passed returns true if all check points passed, otherwise, returns false
 func Passed(ctx context.Context, checkPoints []CheckFunc) bool {
+	if len(checkPoints) == 0 {
+		return true
+	}
+
 	checkNum := len(checkPoints)
 	noErrChan := make(chan e, checkNum)
 	eventChan := make(chan e, len(checkPoints))
 
-	cctx, cancel := context.WithCancel(ctx)
+	cCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	do := make(chan e)
 	for _, cf := range checkPoints {
-		mergeChan(eventChan, wrapCheck(do, cctx, cf, noErrChan), false)
+		mergeChan(eventChan, wrapCheck(cCtx, do, cf, noErrChan), false)
 	}
 	close(do)
 
@@ -79,18 +80,18 @@ func Passed(ctx context.Context, checkPoints []CheckFunc) bool {
 				checkNum--
 			case <-eventChan:
 				checkNum--
-				if cctx.Err() == nil {
+				if cCtx.Err() == nil {
 					passChan <- false
 				}
 
 			case <-ctx.Done():
-				if cctx.Err() == nil {
+				if cCtx.Err() == nil {
 					passChan <- false
 				}
 			}
 
 			if checkNum == 0 {
-				if cctx.Err() == nil {
+				if cCtx.Err() == nil {
 					passChan <- true
 				}
 				return
@@ -103,15 +104,19 @@ func Passed(ctx context.Context, checkPoints []CheckFunc) bool {
 
 // NoError returns the first error it got, if all passed, returns nil
 func NoError(ctx context.Context, checkPoints []CheckErrFunc) error {
+	if len(checkPoints) == 0 {
+		return nil
+	}
+
 	checkNum := len(checkPoints)
 	errorChan := make(chan error, len(checkPoints))
 
-	cctx, cancel := context.WithCancel(ctx)
+	cCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	do := make(chan e)
 	for _, cf := range checkPoints {
-		mergeChan(errorChan, wrapCheckWithError(do, cctx, cf), true)
+		mergeChan(errorChan, wrapCheckWithError(cCtx, do, cf), true)
 	}
 	close(do)
 
@@ -128,12 +133,12 @@ func NoError(ctx context.Context, checkPoints []CheckErrFunc) error {
 					errGot <- nil
 					return
 				}
-				if err != nil && cctx.Err() == nil {
+				if err != nil && cCtx.Err() == nil {
 					errGot <- err
 					return
 				}
 			case <-ctx.Done():
-				if cctx.Err() == nil {
+				if cCtx.Err() == nil {
 					errGot <- ctx.Err()
 				}
 				return
