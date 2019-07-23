@@ -17,14 +17,14 @@ var noError = flag.Bool("ne", false, "no error")
 func generateErr(d time.Duration) error {
 	returnError := time.Now().Nanosecond()%4 != 0 && *noError == false
 	if returnError {
-		printf("error sleep %s", d)
+		printf("start to sleep %s with error", d)
 	} else {
-		printf("sleep %s", d)
+		printf("start to sleep %s", d)
 	}
 	time.Sleep(d)
 	printf("done sleep %s", d)
 	if returnError {
-		return fmt.Errorf("error: sleep %s", d)
+		return fmt.Errorf("sleep %s", d)
 	}
 	return nil
 }
@@ -40,20 +40,12 @@ func println(msg string) {
 }
 
 func testCheck() {
-	checkErrA := func() bool { return generateErr(time.Second) == nil }
-	checkErrB := func() bool { return generateErr(time.Second/2) == nil }
-	checkErrC := func() bool { return generateErr(time.Second/3) == nil }
-	checkErrD := func() bool {
-		return generateErr(time.Second/4-100*time.Microsecond) == nil
-	}
-	checkErrE := func() bool { return generateErr(time.Second/4) == nil }
-
 	checkPoints := []check.Func{
-		checkErrA,
-		checkErrB,
-		checkErrC,
-		checkErrD,
-		checkErrE,
+		func() bool { return generateErr(time.Second) == nil },
+		func() bool { return generateErr(time.Second/2) == nil },
+		func() bool { return generateErr(time.Second/3) == nil },
+		func() bool { return generateErr(time.Second/4-100*time.Microsecond) == nil },
+		func() bool { return generateErr(time.Second/4) == nil },
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
@@ -70,20 +62,13 @@ func testCheck() {
 }
 
 func testCheckError() {
-	checkErrA := func() error { return generateErr(time.Second) }
-	checkErrB := func() error { return generateErr(time.Second / 2) }
-	checkErrC := func() error { return generateErr(time.Second / 3) }
-	checkErrD := func() error {
-		return generateErr(time.Second/4 - 100*time.Microsecond)
-	}
-	checkErrE := func() error { return generateErr(time.Second / 4) }
 
 	checkPoints := []check.FuncWithErr{
-		checkErrA,
-		checkErrB,
-		checkErrC,
-		checkErrD,
-		checkErrE,
+		func() error { return generateErr(time.Second) },
+		func() error { return generateErr(time.Second / 2) },
+		func() error { return generateErr(time.Second / 3) },
+		func() error { return generateErr(time.Second/4 - 100*time.Microsecond) },
+		func() error { return generateErr(time.Second / 4) },
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
