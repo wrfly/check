@@ -93,8 +93,8 @@ func TestCheck(t *testing.T) {
 	t.Run("not pass with all cancel", func(t *testing.T) {
 		checkPoints := gCheckpoints(false)
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
-		defer cancel()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		cancel()
 
 		if Passed(ctx, checkPoints) {
 			t.Error("not going to happen")
@@ -104,8 +104,8 @@ func TestCheck(t *testing.T) {
 	t.Run("error with all cancel", func(t *testing.T) {
 		checkPoints := gErrCheckpoints(true)
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
-		defer cancel()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		cancel()
 
 		if NoError(ctx, checkPoints) != nil {
 			t.Error("not going to happen")
@@ -130,6 +130,15 @@ func TestCheck(t *testing.T) {
 		defer cancel()
 
 		if NoError(ctx, checkPoints) != nil {
+			t.Error("not going to happen")
+		}
+	})
+
+	t.Run("no check points", func(t *testing.T) {
+		if NoError(context.Background(), []FuncWithErr{}) != nil {
+			t.Error("not going to happen")
+		}
+		if !Passed(context.Background(), []Func{}) {
 			t.Error("not going to happen")
 		}
 	})

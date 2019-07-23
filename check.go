@@ -4,41 +4,40 @@ import (
 	"context"
 )
 
-// Func is the check function only return true or false
+// Func is the check function that only returns true or false
 type Func func() bool
 
-// FuncWithErr returns error if found
+// FuncWithErr returns error if any
 type FuncWithErr func() error
 
 type e struct{}
 
-func wrapCheck(ctx context.Context, do chan e, cf Func, noErrChan chan e) chan e {
-	ch := make(chan e)
+func wrapCheck(ctx context.Context, start chan e, cf Func, noErrChan chan e) chan e {
+	failed := make(chan e)
 	go func() {
 		c := make(chan bool, 1)
-		<-do
+		defer close(c)
+		<-start
 
 		select {
 		case <-ctx.Done():
-			close(ch) // not pass
+			close(failed)
 		case c <- cf():
-			close(c)
-			if <-c {
-				noErrChan <- e{}
+			if !<-c {
+				close(failed)
 			} else {
-				// not pass
-				close(ch)
+				noErrChan <- e{}
 			}
 		}
 	}()
-	return ch
+	return failed
 }
 
-func wrapCheckWithError(ctx context.Context, do chan e, cf FuncWithErr) chan error {
+func wrapCheckWithError(ctx context.Context, start chan e, cf FuncWithErr) chan error {
 	ch := make(chan error)
 	go func() {
 		defer close(ch)
-		<-do
+		<-start
 
 		select {
 		case <-ctx.Done():
@@ -50,78 +49,81 @@ func wrapCheckWithError(ctx context.Context, do chan e, cf FuncWithErr) chan err
 
 // Passed returns true if all check points passed, otherwise, returns false
 func Passed(ctx context.Context, checkPoints []Func) bool {
-	if len(checkPoints) == 0 {
+	checkNum := len(checkPoints)
+	if checkNum == 0 {
 		return true
 	}
-
-	checkNum := len(checkPoints)
-	noErrChan := make(chan e, checkNum)
-	eventChan := make(chan e, len(checkPoints))
+	passedChan := make(chan e, checkNum)
+	failedChan := make(chan e, checkNum)
 
 	cCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	do := make(chan e)
+	start := make(chan e)
 	for _, cf := range checkPoints {
-		mergeChan(eventChan, wrapCheck(cCtx, do, cf, noErrChan), false)
+		go mergeE(failedChan, wrapCheck(cCtx, start, cf, passedChan))
 	}
-	close(do)
 
 	passChan := make(chan bool)
 
 	go func() {
 		defer close(passChan)
-		defer close(eventChan)
-		defer close(noErrChan)
-
+		defer close(failedChan)
+		defer close(passedChan)
 		for {
-			select {
-			case <-noErrChan:
-				checkNum--
-			case <-eventChan:
-				checkNum--
-				if cCtx.Err() == nil {
-					passChan <- false
-				}
-
-			case <-ctx.Done():
-				if cCtx.Err() == nil {
-					passChan <- false
-				}
-			}
-
 			if checkNum == 0 {
+				// all checkpoints passed, if the check context
+				// is still on going (within the context)
+				// then the check passed, return to close all the channels
 				if cCtx.Err() == nil {
 					passChan <- true
 				}
 				return
 			}
+
+			select {
+			case <-passedChan:
+				// one check passed
+				checkNum--
+
+			case <-failedChan:
+				checkNum--
+				// one check failed, then if the
+				// check context is still on going,
+				// then the check list is failed
+				if cCtx.Err() == nil {
+					passChan <- false
+				}
+
+			case <-ctx.Done():
+				passChan <- false
+			}
+
 		}
 	}()
+
+	close(start) // start all checks at the same time
 
 	return <-passChan
 }
 
 // NoError returns the first error it got, if all passed, returns nil
 func NoError(ctx context.Context, checkPoints []FuncWithErr) error {
-	if len(checkPoints) == 0 {
+	checkNum := len(checkPoints)
+	if checkNum == 0 {
 		return nil
 	}
-
-	checkNum := len(checkPoints)
 	errorChan := make(chan error, len(checkPoints))
 
 	cCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	do := make(chan e)
+	start := make(chan e)
 	for _, cf := range checkPoints {
-		mergeChan(errorChan, wrapCheckWithError(cCtx, do, cf), true)
+		go mergeErr(errorChan, wrapCheckWithError(cCtx, start, cf))
 	}
-	close(do)
 
 	errGot := make(chan error)
-
 	go func() {
 		defer close(errGot)
 		for {
@@ -138,23 +140,20 @@ func NoError(ctx context.Context, checkPoints []FuncWithErr) error {
 					return
 				}
 			case <-ctx.Done():
-				if cCtx.Err() == nil {
-					errGot <- ctx.Err()
-				}
 				return
 			}
 		}
 	}()
 
+	close(start)
+
 	return <-errGot
 }
 
-func mergeChan(dest, src interface{}, isError bool) {
-	go func() {
-		if isError {
-			dest.(chan error) <- <-src.(chan error)
-		} else {
-			dest.(chan e) <- <-src.(chan e)
-		}
-	}()
+func mergeE(dest, src chan e) {
+	dest <- <-src
+}
+
+func mergeErr(dest, src chan error) {
+	dest <- <-src
 }
